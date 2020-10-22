@@ -1,0 +1,42 @@
+---
+title: Object detection code utilizing darknet YOLO 
+author: Kwanghun Choi
+output: pdf_document
+---
+
+```{r}
+# set working directory
+# Directory for darknet execution file
+setwd("/home/kwanghun/Kwanghun/Tasks/Project/darknet/")
+# Directory for image sources
+ImageList <- list.files("/home/kwanghun/Kwanghun/Tasks/DeepLearning/lelab/Data/Yolo/SNU_Samples/", pattern="jpg$", full.names=T)
+```
+
+```{r}
+# Create function to execute darknet evaluation code 
+Eval_func <- function(x, c_data, c_cfg, c_weight)
+{
+    New_Name <- gsub(".jpg", "_Yolo.jpg", x)
+    system(paste("./darknet detector test", c_data, c_cfg, c_weight, x, "; mv prediction.jpg", New_Name, sep = " "))
+}
+```
+
+```{r}
+# Path for the data file
+c_data   <- paste(getwd(), "/custom/dat_STD_2020_20200812.data", sep="") 
+# Path for the configuration file
+c_cfg    <- paste(getwd(), "/custom/cfg_yolov3_STD_2020.cfg", sep="")
+# Path for the weight file
+c_weight <- paste(getwd(), "/backup_STD_2020/cfg_yolov3_STD_2020_450000.weights", sep="") 
+```
+
+```{r}
+t = 0
+for( i in ImageList)
+{
+    t <- t + 1
+    Eval_func(i, c_data, c_cfg, c_weight)
+    if(t%%10 == 0){cat(t, "\n")}
+}
+```
+

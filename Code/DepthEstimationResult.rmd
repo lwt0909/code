@@ -1,0 +1,40 @@
+---
+title: Depth estimation from Monodepth2 result
+author: Kwanghun Choi
+output: pdf_document
+---
+
+# Load essential libraries
+```{r}
+# Explanatory analysis of MONOdepth result
+library(pacman)
+p_load(dplyr, ggplot2, ggpmisc)
+```
+
+# Read and organize the data
+```{r}
+# Read data
+setwd("/home/kwanghun/Dropbox/Project/TreeInventory/Data/DepthEstimation/")
+D_result <- read.csv("MonoDepth2VSDistance.csv") 
+colnames(D_result) <- c("ID", "Number", "Distance", "Disparity", "InvDisparity")
+D_result$ID <- as.factor(D_result$ID)
+```
+
+# Create plot for the data
+```{r}
+summary(lm(Distance~InvDisparity, data=D_result))
+D_plot <- 
+    ggplot(data = D_result, aes(x = InvDisparity, y = Distance, col=ID)) + 
+    geom_point() +
+    stat_smooth(method="lm", aes( group = 1 )) + 
+    geom_text(x = 25,  y = 45, label = "y = 0.20 * x + 8.22", color="black") +
+    geom_text(x = 25, y = 40, label = "R^2 = 0.32", color="black") +
+    theme(legend.position = "none",text = element_text(size=20) )
+```
+
+# Result
+```{r, echo=F}
+D_plot
+```
+
+

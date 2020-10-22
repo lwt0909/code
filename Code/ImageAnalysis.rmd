@@ -1,0 +1,168 @@
+---
+title: Code to analyze tree structure from an image
+author: Kwanghun Choi
+output: pdf_document
+---
+# Install and load essential packages for analysis
+```{r}
+pacman::p_load("imager", "tidyverse", "foreach", "segmented", "rmarkdown", "pander")
+```
+
+# Assign folders for analysis
+```{r}
+data_path <- c("~/Kwanghun/Tasks/DeepLearning/lelab/Data/SemanticSegmentation/")
+data_name <- c("GSV_360_20200924")
+```
+
+# Load data
+```{r}
+# Image With Yolo annotation pictures
+Yolo <- load.image(paste0(data_path, data_name, "/raw/Y_ZE.jpg")) 
+# Image withOut (Ohne) Background pictures
+SS <- load.image(paste0(data_path, data_name, "/result0/semantic/semantic_pred_0.png"))  
+```
+
+# Plot and check cropping regions
+```{r}
+# Show two pictures in a row
+par(mfrow=c(1,2))
+# 1. Image With Background
+plot(Yolo)
+# Create boundary for a tree manually
+abline(v=100, col="red") ; abline(v=300, col="red") ; abline(244,0, col="red"); abline(244,0, col="red")
+T1 <- c(100, 300, 244, 832)
+abline(v=535, col="red") ; abline(v=715, col="red") ; abline(275,0, col="red"); abline(244,0, col="red")
+T2 <- c(535, 715, 275, 832)
+abline(v=650, col="red") ; abline(v=765, col="red") ; abline(302,0, col="red"); abline(244,0, col="red")
+T3 <- c(650, 765, 302, 832)
+abline(v=836, col="red") ; abline(v=975, col="red") ; abline(294,0, col="red"); abline(244,0, col="red")
+T4 <- c(836, 975, 294, 832)
+abline(v=873, col="red") ; abline(v=1143, col="red"); abline(148,0, col="red")  ; abline(244,0, col="red")
+T5 <- c(873, 1143, 8, 832)
+abline(v=1075, col="red"); abline(v=1585, col="red"); abline(150,0, col="red"); abline(244,0, col="red")
+T6 <- c(1075, 1585, 150, 832)
+abline(v=1460, col="red"); abline(v=1664, col="red"); abline(208,0, col="red" ; abline(244,0, col="red"))
+T7 <- c(1460, 1664, 208, 832)
+
+abline(416, 0,col="red")
+
+# 2. Image withOut Background
+plot(SS)
+```
+
+# Information of pictures
+```{r}
+W <- nrow(Yolo) # Width of the picture
+H <- ncol(Yolo) # Height of the picture
+VP <- H/2       # View point of the picture
+VH <- 2.0         # Height of the Camera
+```
+
+
+# Split images
+```{r}
+# Split image with imsub
+Spliter <- function(Img, BBox){ Img %>% imsub(x >= BBox[1] & x <= BBox[2]) %>% imsub(y >= BBox[3] & y <= BBox[4]) }
+SS_1 <- Spliter(SS, BBox = c(100,300,1, H))
+```
+
+
+# Image analysis
+
+
+```{r}
+# Remove all other colors except those of vegetation pixels from the semented image
+# Image extractor
+TreeExtractor <- 
+    function(Img){
+        IO <- Img
+        R(IO)[which(!R(IO)[] * 255 == 107)] <- NA
+        G(IO)[which(!G(IO)[] * 255 == 142)] <- NA
+        B(IO)[which(!B(IO)[] * 255 == 35)] <- NA
+        return(IO)
+    }
+
+# Check the result map
+TreeOnly <- TreeExtractor(SS_1)
+plot(TreeOnly)
+```
+
+# Calculate pixel width of the individual tree
+```{r}
+# Extract the range of tree height 
+TreeOnly_col <- as.numeric(colSums(R(TreeOnly), na.rm=T)) %>% ifelse(. < 1, NA, .)
+TreeOnly_min <- ((TreeOnly_col * 0 + 1) * c(1:H)) %>% min(.,na.rm=T)
+TreeOnly_max <- ((TreeOnly_col * 0 + 1) * c(1:H)) %>% max(.,na.rm=T)
+# Calculate the pixel width of the tree
+PW <- VH/(TreeOnly_max - VP)
+```
+
+# Cut verical frame fit to the tree size
+```{r}
+TreeFit <- Spliter(TreeOnly, c(1, nrow(TreeOnly), TreeOnly_min, TreeOnly_max))
+plot(TreeFit)
+```
+
+## 2. count values from bottom to top
+```{r}
+# In this part, I calculated the vegetation pixel by each row
+out <- foreach(i = seq(ncol(TreeFit),1, -1), .combine=c) %do% {
+    length(which(!is.na(R(TreeFit)[,i]+G(TreeFit)[,i]+B(TreeFit)[,i])))
+}
+
+# Remove the row with zero vegetation pixels
+out.nonzero <- out[out[]>0]
+out.df <- data.frame(PixW = out.nonzero) %>%
+            mutate(PixH = c(1:nrow(.))) 
+plot(PixW ~ PixH, data=out.df)
+
+# Check the first change point of the plot
+out.cp <- strucchange::Fstats(PixW ~ 1, data=out.df)
+abline(v=out.cp$breakpoint, col="red")
+```
+
+## 3. Create Tree inventory table
+```{r}
+# Create Tree inventory in pixels
+Tree_W   <- max( out.df$PixW, na.rm=T)            # Crown width
+Tree_H   <- nrow(out.df)                          # Tree Height
+Tree_BH  <- out.cp$breakpoint                     # Height below crown.
+Tree_DBH <- quantile(out.df$PixW[1:Tree_BH], 0.1) # DBH which is assumed to be a median width below crown.
+
+# Create Table for the metric.
+M <- data.frame(Tree_H, Tree_W, Tree_BH, Tree_DBH)
+
+# Convert Pixels to real units
+#FocLmm <- 3.94                              # Focal length of Pocophone F1
+#PixSizeCCD <- 1.4 * 10^-6                      # Pixel width of the camera ccd of Pocophone F1
+#Dist <- 100                                  # Distance from the camera to the object
+
+# Calculate width of a pixel in the image
+#PixSizeIMG <- Dist * PixSizeCCD / FocLmm
+PixSizeIMG <- 0.025 # Assumption of PixSizeIMG of GSV
+# Final table
+pander(M *  PW)
+```
+
+## Supl. Extract colors of vegetation (107, 142, 35) from panoptic-deeplab hompasge (https://github.com/bowenc0221/panoptic-deeplab/issues/42)
+
+0  : "road"
+1  : "sidewalk"
+2  : "building"
+3  : "wall"
+4  : "fence"
+5  : "pole" (153, 153, 153) 
+6  : "traffic light"
+7  : "traffic sign"
+8  : "vegetation" (107, 142, 35)
+9  : "terrain"
+10 : "sky"
+11 : "person"
+12 : "rider"
+13 : "car"
+14 : "truck"
+15 : "bus" (0, 60, 100)
+16 : "train"
+17 : "motorcycle"
+18 : "bicycle"
+
